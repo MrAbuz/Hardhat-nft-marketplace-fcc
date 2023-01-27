@@ -1,6 +1,6 @@
 //Patrick: Ideally, only 1 assert per "it" block
 //                  check everything
-//                  check the test coverage in the end to make sure its 100%
+//                  goal: check the test coverage in the end to make sure its 100%
 
 const { assert, expect } = require("chai")
 const { network, deployments, ethers } = require("hardhat")
@@ -8,14 +8,14 @@ const { developmentChains } = require("../../helper-hardhat-config")
 
 !developmentChains.includes(network.name)
     ? describe.skip
-    : describe("Nft Marketplace Tests", () => {
+    : describe("Nft Marketplace Unit Tests", () => {
           let nftMarketplace, basicNft, accounts, deployer, player
           const PRICE = ethers.utils.parseEther("0.1")
           const TOKEN_ID = 0
           beforeEach(async () => {
               accounts = await ethers.getSigners()
               deployer = accounts[0] //could also use (await getNamedAccounts()).deployer
-              player = accounts[1]
+              player = accounts[1] //patrick says its better like this cuz of the type
               await deployments.fixture(["all"])
               nftMarketplace = await ethers.getContract("NftMarketplace") //getContract defaults to grabbing the account 0 which is our deployer, so we dont need to say it
               basicNft = await ethers.getContract("BasicNft")
@@ -39,12 +39,13 @@ const { developmentChains } = require("../../helper-hardhat-config")
               })
               it("modifier notListed - reverts if the nft is already listed", async () => {
                   await nftMarketplace.listItem(basicNft.address, TOKEN_ID, PRICE)
+                  const error = `NftMarketplace__AlreadyListed("${basicNft.address}", ${TOKEN_ID})`
                   await expect(
                       nftMarketplace.listItem(basicNft.address, TOKEN_ID, PRICE)
-                  ).to.be.revertedWith("NftMarketplace__AlreadyListed")
+                  ).to.be.revertedWith(error)
               })
               it("modifier isOwner - reverts if it's not the owner trying to list the nft", async () => {
-                  const nftMarketplacePlayer = await nftMarketplace.connect(player)
+                  const nftMarketplacePlayer = await nftMarketplace.connect(player) //patrick just used await in 1 of the .connects so now i'm not sure if the await is needed
                   await expect(
                       nftMarketplacePlayer.listItem(basicNft.address, TOKEN_ID, PRICE)
                   ).to.be.revertedWith("NftMarketplace__NotOwner")
@@ -56,7 +57,7 @@ const { developmentChains } = require("../../helper-hardhat-config")
                   ).to.be.revertedWith("NftMarketplace__PriceMustBeAboveZero")
               })
               it("reverts if the marketplace doesn't have the nft's approval to sell the nft", async () => {
-                  await basicNft.approve(player.address, TOKEN_ID)
+                  await basicNft.approve(ethers.constants.AddressZero, TOKEN_ID) //address zero
                   await expect(
                       nftMarketplace.listItem(basicNft.address, TOKEN_ID, PRICE)
                   ).to.be.revertedWith("NftMarketplace__NotApprovedForMarketplace")
@@ -105,7 +106,7 @@ const { developmentChains } = require("../../helper-hardhat-config")
                   await tx.wait(1)
                   const listing = await nftMarketplace.getListing(basicNft.address, TOKEN_ID)
                   assert.equal(listing.price.toString(), 0)
-                  assert(listing.seller.toString() != deployer.address) //how do I say 0x address?
+                  assert.equal(listing.seller.toString(), ethers.constants.AddressZero) // nice way to add the address 0x000..
               })
               it("after the nft is sold, the nft is transfered to the buyers address", async () => {
                   await nftMarketplace.listItem(basicNft.address, TOKEN_ID, PRICE)
@@ -124,7 +125,7 @@ const { developmentChains } = require("../../helper-hardhat-config")
                   await nftMarketplace.cancelListing(basicNft.address, TOKEN_ID)
                   const listing = await nftMarketplace.getListing(basicNft.address, TOKEN_ID)
                   assert.equal(listing.price, 0)
-                  assert(listing.seller.toString() != deployer.address)
+                  assert.equal(listing.seller.toString(), ethers.constants.AddressZero)
               })
               it("emits the ItemCanceled event", async () => {
                   await nftMarketplace.listItem(basicNft.address, TOKEN_ID, PRICE)
@@ -141,9 +142,10 @@ const { developmentChains } = require("../../helper-hardhat-config")
                   ).to.be.revertedWith("NftMarketplace__NotOwner")
               })
               it("modifier isListed - reverts if the nft is not listed", async () => {
+                  const error = `NotListed("${basicNft.address}", ${TOKEN_ID})`
                   await expect(
                       nftMarketplace.cancelListing(basicNft.address, TOKEN_ID)
-                  ).to.be.revertedWith("NftMarketplace__NotListed")
+                  ).to.be.revertedWith(error)
               })
           })
           describe("updateListing function", () => {
